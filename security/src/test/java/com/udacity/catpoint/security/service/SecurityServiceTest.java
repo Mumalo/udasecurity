@@ -23,8 +23,9 @@ import java.util.stream.Stream;
 @ExtendWith(MockitoExtension.class)
 public class SecurityServiceTest {
 
-    @Mock
-    Sensor sensor;
+    private Sensor sensor;
+
+    private final String randomString = UUID.randomUUID().toString();
 
     @Mock
     SecurityRepository securityRepository;
@@ -36,76 +37,20 @@ public class SecurityServiceTest {
     SecurityService securityService;
 
 
+    private Sensor getNewSensor(){
+        return new Sensor(randomString, SensorType.DOOR);
+    }
 
     @BeforeEach
     void setUp() {
         securityService = new SecurityService(securityRepository, imageService);
-    }
-
-    @ParameterizedTest //covers 1 and 2 test cases
-    @EnumSource(value = ArmingStatus.class, names = {"ARMED_HOME", "ARMED_AWAY"})
-    void changeAlarmStatus_alarmArmedAndSensorActivated_alarmStatusPending(ArmingStatus armingStatus){
-        when(sensor.getActive()).thenReturn(false);
-        when(securityRepository.getSensors()).thenReturn(getSensors(true, 2));
-        when(securityService.getArmingStatus()).thenReturn(armingStatus);
-        when(securityService.getAlarmStatus()).thenReturn(AlarmStatus.NO_ALARM);
-        securityService.changeSensorActivationStatus(sensor, true);
-        ArgumentCaptor<AlarmStatus> captor = ArgumentCaptor.forClass(AlarmStatus.class);
-        verify(securityRepository, atMostOnce()).setAlarmStatus(captor.capture());
-        assertEquals(captor.getValue(), AlarmStatus.PENDING_ALARM);
-
-        //alarm was already pending
-        when(securityService.getAlarmStatus()).thenReturn(AlarmStatus.PENDING_ALARM);
-        securityService.changeSensorActivationStatus(sensor, true);
-        verify(securityRepository, atMost(2)).setAlarmStatus(captor.capture()); //first call up
-        assertEquals(captor.getValue(), AlarmStatus.ALARM);
-    }
-
-    @Test //tests 3
-    void changeAlarmStatus_alarmPendingAndAllSensorsInactive_changeToNoAlarm(){
-        Set<Sensor> allSensors = getSensors(false, 4);
-        when(securityRepository.getSensors()).thenReturn(allSensors);
-        securityService.setAlarmStatus(AlarmStatus.PENDING_ALARM);
-        ArgumentCaptor<AlarmStatus> captor = ArgumentCaptor.forClass(AlarmStatus.class);
-        verify(securityRepository, atMostOnce()).setAlarmStatus(captor.capture());
-        assertEquals(captor.getValue(), AlarmStatus.NO_ALARM);
-    }
-
-    @Test  //tests 4
-    void changeAlarmState_alarmActiveAndSensorStateChanges_stateNotAffected() {
-        when(sensor.getActive()).thenReturn(false);
-        when(securityRepository.getAlarmStatus()).thenReturn(AlarmStatus.ALARM);
-        securityService.changeSensorActivationStatus(sensor, true);
-        verify(securityRepository, never()).setAlarmStatus(any(AlarmStatus.class));
-        ArgumentCaptor<Sensor> captor = ArgumentCaptor.forClass(Sensor.class);
-        verify(securityRepository, atMostOnce()).updateSensor(captor.capture());
-        assertEquals(captor.getValue(), sensor);
-
-        //when sensor state changes
-        when(sensor.getActive()).thenReturn(true);
-        securityService.changeSensorActivationStatus(sensor, false);
-        verify(securityRepository, never()).setAlarmStatus(any(AlarmStatus.class));
-        verify(securityRepository, atMost(2)).updateSensor(captor.capture());
-        assertEquals(captor.getValue(), sensor);
-
-    }
-
-    @ParameterizedTest
-    @MethodSource("booleanMethodSource")
-    void changeAlarmStatus_sensorStatusChangeAndSystemIsAlreadyDisarmed_stateNotAffected(boolean b1, boolean b2){
-        when(sensor.getActive()).thenReturn(b1);
-        when(securityRepository.getArmingStatus()).thenReturn(ArmingStatus.DISARMED);
-        securityService.changeSensorActivationStatus(sensor, b2);
-        verify(securityRepository, never()).setAlarmStatus(any(AlarmStatus.class));
-        ArgumentCaptor<Sensor> captor = ArgumentCaptor.forClass(Sensor.class);
-        verify(securityRepository, atMostOnce()).updateSensor(captor.capture());
-        assertEquals(captor.getValue(), sensor);
+        sensor = getNewSensor();
     }
 
     static Stream<Arguments> booleanMethodSource(){
         return Stream.of(
-                Arguments.of(true, true),
-                Arguments.of(false, true)
+                Arguments.of(false, true),
+                Arguments.of(true, false)
         );
     }
 
@@ -120,9 +65,65 @@ public class SecurityServiceTest {
         return sensors;
     }
 
+    @ParameterizedTest //covers 1
+    @EnumSource(value = ArmingStatus.class, names = {"ARMED_HOME", "ARMED_AWAY"})
+    void changeAlarmStatus_alarmArmedAndSensorActivated_alarmStatusPending(ArmingStatus armingStatus){
+        when(securityRepository.getSensors()).thenReturn(getSensors(true, 2));
+        when(securityService.getArmingStatus()).thenReturn(armingStatus);
+        when(securityService.getAlarmStatus()).thenReturn(AlarmStatus.NO_ALARM);
+        securityService.changeSensorActivationStatus(sensor, true);
+        ArgumentCaptor<AlarmStatus> captor = ArgumentCaptor.forClass(AlarmStatus.class);
+        verify(securityRepository, atMostOnce()).setAlarmStatus(captor.capture());
+        assertEquals(captor.getValue(), AlarmStatus.PENDING_ALARM);
+    }
+
+    @Test
+    void changeAlarmStatus_alarmAlreadyPendingAndSensorActivated_alarmStatusAlarm(){
+        when(securityService.getAlarmStatus()).thenReturn(AlarmStatus.PENDING_ALARM);
+        securityService.changeSensorActivationStatus(sensor, true);
+        verify(securityRepository, atMost(2)).setAlarmStatus(AlarmStatus.ALARM); //first call up
+    }
+
+    @Test //tests 3
+    void changeAlarmStatus_alarmPendingAndAllSensorsInactive_changeToNoAlarm(){
+        Set<Sensor> allSensors = getSensors(false, 4);
+        when(securityRepository.getSensors()).thenReturn(allSensors);
+        securityService.setAlarmStatus(AlarmStatus.PENDING_ALARM);
+        ArgumentCaptor<AlarmStatus> captor = ArgumentCaptor.forClass(AlarmStatus.class);
+        verify(securityRepository, atMostOnce()).setAlarmStatus(captor.capture());
+        assertEquals(captor.getValue(), AlarmStatus.NO_ALARM);
+    }
+
+    @Test  //tests 4
+    void changeAlarmState_alarmActiveAndSensorStateChanges_stateNotAffected() {
+        sensor.setActive(false);
+        when(securityRepository.getAlarmStatus()).thenReturn(AlarmStatus.ALARM);
+        securityService.changeSensorActivationStatus(sensor, true);
+        verify(securityRepository, never()).setAlarmStatus(any(AlarmStatus.class));
+        ArgumentCaptor<Sensor> captor = ArgumentCaptor.forClass(Sensor.class);
+        verify(securityRepository, atMostOnce()).updateSensor(captor.capture());
+        assertEquals(captor.getValue(), sensor);
+
+        //when sensor state changes
+        sensor.setActive(true);
+        securityService.changeSensorActivationStatus(sensor, false);
+        verify(securityRepository, never()).setAlarmStatus(any(AlarmStatus.class));
+        verify(securityRepository, atMost(2)).updateSensor(captor.capture());
+        assertEquals(captor.getValue(), sensor);
+    }
+
+    @ParameterizedTest
+    @MethodSource("booleanMethodSource")
+    void changeAlarmStatus_sensorStatusChangeAndSystemIsAlreadyDisarmed_stateNotAffected(Boolean b1, Boolean b2){
+        sensor.setActive(b1);
+        when(securityRepository.getArmingStatus()).thenReturn(ArmingStatus.DISARMED);
+        securityService.changeSensorActivationStatus(sensor, b2);
+        verify(securityRepository, never()).setAlarmStatus(any(AlarmStatus.class));
+        verify(securityRepository, atMostOnce()).updateSensor(sensor);
+    }
+
     @Test //tests 5
     void changeAlarmState_systemActivatedWhileAlreadyActiveAndAlarmPending_changeToAlarmState(){
-        when(sensor.getActive()).thenReturn(true);
         when(securityRepository.getAlarmStatus()).thenReturn(AlarmStatus.PENDING_ALARM);
         securityService.changeSensorActivationStatus(sensor, true);
         ArgumentCaptor<AlarmStatus> captor = ArgumentCaptor.forClass(AlarmStatus.class);
