@@ -40,13 +40,6 @@ public class SecurityService {
                 .collect(Collectors.toSet());
     }
 
-    Set<Sensor> getInActiveSensors(){
-        return getSensors()
-                .stream()
-                .filter(sensor -> !sensor.getActive())
-                .collect(Collectors.toSet());
-    }
-
     /**
      * Sets the current arming status for the system. Changing the arming status
      * may update both the alarm status.
