@@ -68,7 +68,6 @@ public class SecurityServiceTest {
     @ParameterizedTest //covers 1
     @EnumSource(value = ArmingStatus.class, names = {"ARMED_HOME", "ARMED_AWAY"})
     void changeAlarmStatus_alarmArmedAndSensorActivated_alarmStatusPending(ArmingStatus armingStatus){
-        when(securityRepository.getSensors()).thenReturn(getSensors(true, 2));
         when(securityService.getArmingStatus()).thenReturn(armingStatus);
         when(securityService.getAlarmStatus()).thenReturn(AlarmStatus.NO_ALARM);
         securityService.changeSensorActivationStatus(sensor, true);
@@ -77,7 +76,7 @@ public class SecurityServiceTest {
         assertEquals(captor.getValue(), AlarmStatus.PENDING_ALARM);
     }
 
-    @Test
+    @Test //covers 2
     void changeAlarmStatus_alarmAlreadyPendingAndSensorActivated_alarmStatusAlarm(){
         when(securityService.getAlarmStatus()).thenReturn(AlarmStatus.PENDING_ALARM);
         securityService.changeSensorActivationStatus(sensor, true);
@@ -87,8 +86,12 @@ public class SecurityServiceTest {
     @Test //tests 3
     void changeAlarmStatus_alarmPendingAndAllSensorsInactive_changeToNoAlarm(){
         Set<Sensor> allSensors = getSensors(false, 4);
+        Sensor last = allSensors.iterator().next();
+        last.setActive(true);
         when(securityRepository.getSensors()).thenReturn(allSensors);
-        securityService.setAlarmStatus(AlarmStatus.PENDING_ALARM);
+        when(securityRepository.getAlarmStatus()).thenReturn(AlarmStatus.PENDING_ALARM);
+        //deactivate this sensor
+        securityService.changeSensorActivationStatus(last, false);
         ArgumentCaptor<AlarmStatus> captor = ArgumentCaptor.forClass(AlarmStatus.class);
         verify(securityRepository, atMostOnce()).setAlarmStatus(captor.capture());
         assertEquals(captor.getValue(), AlarmStatus.NO_ALARM);
@@ -128,7 +131,7 @@ public class SecurityServiceTest {
         securityService.changeSensorActivationStatus(sensor, true);
         ArgumentCaptor<AlarmStatus> captor = ArgumentCaptor.forClass(AlarmStatus.class);
         verify(securityRepository, atMostOnce()).setAlarmStatus(captor.capture());
-        assertEquals(captor.getValue(), AlarmStatus.ALARM); //fix code
+        assertEquals(captor.getValue(), AlarmStatus.ALARM);
     }
 
     @ParameterizedTest //tests 6
