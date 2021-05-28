@@ -49,7 +49,7 @@ public class SecurityService {
         if(armingStatus == ArmingStatus.DISARMED) {
             setAlarmStatus(AlarmStatus.NO_ALARM);
         } else if (systemArmed(armingStatus)){
-            setFalseActivationStatusForSensors(getActiveSensors());
+            setFalseActivationStatusForSensors(this.getActiveSensors());
         }
         securityRepository.setArmingStatus(armingStatus);
     }
